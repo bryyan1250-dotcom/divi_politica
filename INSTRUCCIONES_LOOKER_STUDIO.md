@@ -8,6 +8,8 @@ Archivos generados:
 - `mapa_cali_predios.geojson`: geometria + conteo de predios por comuna/corregimiento.
 - `conteo_predios_por_comuna.csv`: tabla resumida para conectar a Looker Studio.
 - `looker_mapa_nativo.csv`: tabla con latitud/longitud para usar graficos de mapa nativos de Looker Studio.
+- `looker_comunas_poligonos_wkt.csv`: tabla con poligonos WKT para BigQuery GEOGRAPHY o visualizaciones compatibles.
+- `codigos_parquet_sin_geometria.csv`: codigos del Parquet que no tienen poligono en el shapefile actual.
 
 ## Opcion recomendada: insertar el HTML como contenido embebido
 
@@ -36,6 +38,8 @@ Para usar un mapa nativo de Looker Studio, carga `looker_mapa_nativo.csv` como f
 Esta opcion muestra puntos o burbujas sobre el mapa de Google. Los mapas nativos de Looker Studio no dibujan automaticamente los poligonos personalizados del shapefile.
 
 Para un mapa con poligonos personalizados, usa `mapa_cali_predios.geojson` en una visualizacion compatible con GeoJSON o en una visualizacion comunitaria. Esta ruta depende del conector/visualizacion disponible en tu cuenta de Looker Studio.
+
+Si el tablero debe mostrar divisiones reales de comunas/corregimientos dentro de un mapa de Google, la ruta mas robusta es cargar `looker_comunas_poligonos_wkt.csv` en BigQuery, convertir `geometry_wkt` a un campo `GEOGRAPHY` con `ST_GEOGFROMTEXT`, y conectar esa tabla a Looker Studio. Un CSV subido directamente a Looker Studio no convierte poligonos WKT en geometria nativa.
 
 ## Regenerar el mapa
 

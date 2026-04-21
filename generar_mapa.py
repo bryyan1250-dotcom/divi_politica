@@ -3,12 +3,13 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 
 # --- 1. CONFIGURACION DE RUTAS ---
 BASE_DIR = Path(__file__).resolve().parent
 
-ruta_parquet = BASE_DIR / "tabla_construcciones_anexos_20260210.parquet"
+ruta_parquet = BASE_DIR / "predio_20260420_ZHG.parquet"
 ruta_shapefile = BASE_DIR / "division_politica_cali.shp"
 ruta_salida_html = BASE_DIR / "mapa_cali_interactivo_resaltado.html"
 ruta_salida_looker = BASE_DIR / "mapa_cali_looker.html"
@@ -16,6 +17,8 @@ ruta_salida_index = BASE_DIR / "index.html"
 ruta_salida_geojson = BASE_DIR / "mapa_cali_predios.geojson"
 ruta_salida_csv = BASE_DIR / "conteo_predios_por_comuna.csv"
 ruta_salida_looker_nativo = BASE_DIR / "looker_mapa_nativo.csv"
+ruta_salida_looker_poligonos = BASE_DIR / "looker_comunas_poligonos_wkt.csv"
+ruta_salida_sin_geometria = BASE_DIR / "codigos_parquet_sin_geometria.csv"
 
 
 # --- 2. PROCESAMIENTO DE DATOS ---
@@ -38,6 +41,17 @@ gdf = gpd.read_file(ruta_shapefile)
 
 gdf["comuna_id"] = gdf["codigo"].astype(str).str.extract(r"(\d+)")[0].str.zfill(2)
 gdf["nombre_mapa"] = gdf["nombre"].astype(str)
+
+codigos_shapefile = set(gdf["comuna_id"])
+codigos_parquet = set(conteo_por_comuna["comuna_id"])
+codigos_sin_geometria = sorted(codigos_parquet - codigos_shapefile)
+conteo_por_comuna[
+    conteo_por_comuna["comuna_id"].isin(codigos_sin_geometria)
+].to_csv(
+    ruta_salida_sin_geometria,
+    index=False,
+    encoding="utf-8-sig",
+)
 
 gdf_final = gdf.merge(conteo_por_comuna, on="comuna_id", how="left")
 gdf_final["total_predios"] = gdf_final["total_predios"].fillna(0).astype(int)
@@ -75,6 +89,7 @@ puntos_mapa["ubicacion"] = (
 puntos_mapa["tipo_zona"] = puntos_mapa["codigo"].astype(int).apply(
     lambda codigo: "Comuna" if codigo <= 22 else "Corregimiento"
 )
+puntos_mapa["etiqueta_mapa"] = puntos_mapa["codigo"].astype(str)
 
 puntos_mapa[
     [
@@ -86,9 +101,30 @@ puntos_mapa[
         "latitud",
         "longitud",
         "ubicacion",
+        "etiqueta_mapa",
     ]
 ].to_csv(
     ruta_salida_looker_nativo,
+    index=False,
+    encoding="utf-8-sig",
+)
+
+poligonos_wkt = gdf_final.copy()
+poligonos_wkt["geometry_wkt"] = poligonos_wkt.geometry.to_wkt()
+poligonos_wkt["tipo_zona"] = poligonos_wkt["codigo"].astype(int).apply(
+    lambda codigo: "Comuna" if codigo <= 22 else "Corregimiento"
+)
+poligonos_wkt[
+    [
+        "codigo",
+        "nombre_mapa",
+        "tipo_zona",
+        "comuna_id",
+        "total_predios",
+        "geometry_wkt",
+    ]
+].to_csv(
+    ruta_salida_looker_poligonos,
     index=False,
     encoding="utf-8-sig",
 )
@@ -193,6 +229,18 @@ fig_looker.update_traces(
     hovertemplate="<b>%{hovertext}</b><br>Total predios: %{z:,.0f}<extra></extra>",
 )
 
+fig_looker.add_trace(
+    go.Scattergeo(
+        lat=puntos_mapa["latitud"],
+        lon=puntos_mapa["longitud"],
+        text=puntos_mapa["etiqueta_mapa"],
+        mode="text",
+        textfont={"size": 10, "color": "#042a4f", "family": "Arial Black, Arial"},
+        hoverinfo="skip",
+        showlegend=False,
+    )
+)
+
 fig_looker.update_geos(
     fitbounds="locations",
     visible=False,
@@ -250,4 +298,8 @@ fig_looker.write_html(
 print(f"GeoJSON guardado en: {ruta_salida_geojson}")
 print(f"CSV guardado en: {ruta_salida_csv}")
 print(f"CSV para mapa nativo de Looker guardado en: {ruta_salida_looker_nativo}")
+print(f"CSV con poligonos WKT guardado en: {ruta_salida_looker_poligonos}")
+if codigos_sin_geometria:
+    print(f"Codigos del Parquet sin geometria en shapefile: {', '.join(codigos_sin_geometria)}")
+    print(f"Detalle guardado en: {ruta_salida_sin_geometria}")
 print("Proceso completado con exito.")
