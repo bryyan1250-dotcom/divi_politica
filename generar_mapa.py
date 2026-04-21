@@ -11,6 +11,8 @@ BASE_DIR = Path(__file__).resolve().parent
 ruta_parquet = BASE_DIR / "tabla_construcciones_anexos_20260210.parquet"
 ruta_shapefile = BASE_DIR / "division_politica_cali.shp"
 ruta_salida_html = BASE_DIR / "mapa_cali_interactivo_resaltado.html"
+ruta_salida_looker = BASE_DIR / "mapa_cali_looker.html"
+ruta_salida_index = BASE_DIR / "index.html"
 ruta_salida_geojson = BASE_DIR / "mapa_cali_predios.geojson"
 ruta_salida_csv = BASE_DIR / "conteo_predios_por_comuna.csv"
 
@@ -131,6 +133,87 @@ fig.write_html(
         "scrollZoom": True,
         "modeBarButtonsToRemove": ["lasso2d", "select2d"],
     },
+)
+
+
+# Version compatible con Looker Studio:
+# no usa mapa base externo ni tiles; Plotly dibuja los poligonos como SVG.
+fig_looker = px.choropleth(
+    gdf_final,
+    geojson=geojson,
+    locations="feature_id",
+    featureidkey="properties.feature_id",
+    color="total_predios",
+    color_continuous_scale=px.colors.sequential.Blues,
+    hover_name="nombre_mapa",
+    hover_data={
+        "feature_id": False,
+        "codigo": False,
+        "comuna_id": False,
+        "nombre_mapa": False,
+        "total_predios": ":,.0f",
+    },
+    labels={"total_predios": "Total predios"},
+)
+
+fig_looker.update_traces(
+    marker_line_width=1.1,
+    marker_line_color="white",
+    hovertemplate="<b>%{hovertext}</b><br>Total predios: %{z:,.0f}<extra></extra>",
+)
+
+fig_looker.update_geos(
+    fitbounds="locations",
+    visible=False,
+    projection_type="mercator",
+)
+
+fig_looker.update_layout(
+    title={
+        "text": "<b>Actualizacion Catastral Cali 2026: Predios por Comuna y Corregimiento</b>",
+        "y": 0.98,
+        "x": 0.5,
+        "xanchor": "center",
+        "yanchor": "top",
+        "font": {"size": 18, "color": "#042a4f"},
+    },
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin={"r": 0, "t": 48, "l": 0, "b": 0},
+    coloraxis_colorbar={
+        "title": "Predios",
+        "thicknessmode": "pixels",
+        "thickness": 15,
+        "lenmode": "pixels",
+        "len": 280,
+        "yanchor": "top",
+        "y": 0.86,
+        "ticks": "outside",
+    },
+    hoverlabel={"bgcolor": "white", "font_size": 14, "font_family": "Arial"},
+)
+
+config_looker = {
+    "displaylogo": False,
+    "responsive": True,
+    "scrollZoom": True,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+}
+
+print(f"Guardando version compatible con Looker Studio en: {ruta_salida_looker}")
+fig_looker.write_html(
+    ruta_salida_looker,
+    include_plotlyjs=True,
+    full_html=True,
+    config=config_looker,
+)
+
+print(f"Actualizando pagina principal en: {ruta_salida_index}")
+fig_looker.write_html(
+    ruta_salida_index,
+    include_plotlyjs=True,
+    full_html=True,
+    config=config_looker,
 )
 
 print(f"GeoJSON guardado en: {ruta_salida_geojson}")
