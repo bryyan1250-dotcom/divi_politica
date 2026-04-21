@@ -13,6 +13,7 @@ ruta_parquet = BASE_DIR / "predio_20260420_ZHG.parquet"
 ruta_shapefile = BASE_DIR / "division_politica_cali.shp"
 ruta_salida_html = BASE_DIR / "mapa_cali_interactivo_resaltado.html"
 ruta_salida_looker = BASE_DIR / "mapa_cali_looker.html"
+ruta_salida_claro = BASE_DIR / "mapa_comunas_claro.html"
 ruta_salida_index = BASE_DIR / "index.html"
 ruta_salida_geojson = BASE_DIR / "mapa_cali_predios.geojson"
 ruta_salida_csv = BASE_DIR / "conteo_predios_por_comuna.csv"
@@ -55,6 +56,9 @@ conteo_por_comuna[
 
 gdf_final = gdf.merge(conteo_por_comuna, on="comuna_id", how="left")
 gdf_final["total_predios"] = gdf_final["total_predios"].fillna(0).astype(int)
+gdf_final["tipo_zona"] = gdf_final["codigo"].astype(int).apply(
+    lambda codigo: "Comuna" if codigo <= 22 else "Corregimiento"
+)
 
 # Plotly trabaja mejor con coordenadas geograficas WGS84.
 if gdf_final.crs is None:
@@ -111,9 +115,6 @@ puntos_mapa[
 
 poligonos_wkt = gdf_final.copy()
 poligonos_wkt["geometry_wkt"] = poligonos_wkt.geometry.to_wkt()
-poligonos_wkt["tipo_zona"] = poligonos_wkt["codigo"].astype(int).apply(
-    lambda codigo: "Comuna" if codigo <= 22 else "Corregimiento"
-)
 poligonos_wkt[
     [
         "codigo",
@@ -290,6 +291,83 @@ fig_looker.write_html(
 print(f"Actualizando pagina principal en: {ruta_salida_index}")
 fig_looker.write_html(
     ruta_salida_index,
+    include_plotlyjs=True,
+    full_html=True,
+    config=config_looker,
+)
+
+fig_claro = px.choropleth(
+    gdf_final,
+    geojson=geojson,
+    locations="feature_id",
+    featureidkey="properties.feature_id",
+    color="tipo_zona",
+    color_discrete_map={
+        "Comuna": "#d7ebf7",
+        "Corregimiento": "#f2f7fb",
+    },
+    hover_name="nombre_mapa",
+    hover_data={
+        "feature_id": False,
+        "codigo": False,
+        "comuna_id": False,
+        "nombre_mapa": False,
+        "tipo_zona": True,
+        "total_predios": ":,.0f",
+    },
+    labels={"total_predios": "Total predios", "tipo_zona": "Tipo"},
+)
+
+fig_claro.update_traces(
+    marker_line_width=2.2,
+    marker_line_color="#ffffff",
+    hovertemplate="<b>%{hovertext}</b><br>Tipo: %{customdata[0]}<br>Total predios: %{customdata[1]:,.0f}<extra></extra>",
+)
+
+fig_claro.add_trace(
+    go.Scattergeo(
+        lat=puntos_mapa["latitud"],
+        lon=puntos_mapa["longitud"],
+        text=puntos_mapa["etiqueta_mapa"],
+        mode="text",
+        textfont={"size": 11, "color": "#042a4f", "family": "Arial Black, Arial"},
+        hoverinfo="skip",
+        showlegend=False,
+    )
+)
+
+fig_claro.update_geos(
+    fitbounds="locations",
+    visible=False,
+    projection_type="mercator",
+)
+
+fig_claro.update_layout(
+    title={
+        "text": "<b>Division politica de Cali: Comunas y Corregimientos</b>",
+        "y": 0.98,
+        "x": 0.5,
+        "xanchor": "center",
+        "yanchor": "top",
+        "font": {"size": 20, "color": "#042a4f"},
+    },
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin={"r": 0, "t": 48, "l": 0, "b": 0},
+    legend={
+        "orientation": "h",
+        "yanchor": "bottom",
+        "y": 0.01,
+        "xanchor": "left",
+        "x": 0.01,
+        "bgcolor": "rgba(255,255,255,0.8)",
+    },
+    hoverlabel={"bgcolor": "white", "font_size": 14, "font_family": "Arial"},
+)
+
+print(f"Guardando version clara de comunas en: {ruta_salida_claro}")
+fig_claro.write_html(
+    ruta_salida_claro,
     include_plotlyjs=True,
     full_html=True,
     config=config_looker,

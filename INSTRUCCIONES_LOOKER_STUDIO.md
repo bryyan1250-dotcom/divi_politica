@@ -4,12 +4,14 @@ Archivos generados:
 
 - `index.html`: mapa Plotly compatible con Looker Studio y listo para GitHub Pages.
 - `mapa_cali_looker.html`: copia del mapa compatible con Looker Studio.
+- `mapa_comunas_claro.html`: mapa enfocado en divisiones claras, sin coropleta por cantidad de predios.
 - `mapa_cali_interactivo_resaltado.html`: mapa Plotly con mapa base externo para uso fuera de Looker Studio.
 - `mapa_cali_predios.geojson`: geometria + conteo de predios por comuna/corregimiento.
 - `conteo_predios_por_comuna.csv`: tabla resumida para conectar a Looker Studio.
 - `looker_mapa_nativo.csv`: tabla con latitud/longitud para usar graficos de mapa nativos de Looker Studio.
 - `looker_comunas_poligonos_wkt.csv`: tabla con poligonos WKT para BigQuery GEOGRAPHY o visualizaciones compatibles.
 - `codigos_parquet_sin_geometria.csv`: codigos del Parquet que no tienen poligono en el shapefile actual.
+- `bigquery_crear_vista_comunas.sql`: SQL para crear una vista con campo `GEOGRAPHY`.
 
 ## Opcion recomendada: insertar el HTML como contenido embebido
 
@@ -40,6 +42,17 @@ Esta opcion muestra puntos o burbujas sobre el mapa de Google. Los mapas nativos
 Para un mapa con poligonos personalizados, usa `mapa_cali_predios.geojson` en una visualizacion compatible con GeoJSON o en una visualizacion comunitaria. Esta ruta depende del conector/visualizacion disponible en tu cuenta de Looker Studio.
 
 Si el tablero debe mostrar divisiones reales de comunas/corregimientos dentro de un mapa de Google, la ruta mas robusta es cargar `looker_comunas_poligonos_wkt.csv` en BigQuery, convertir `geometry_wkt` a un campo `GEOGRAPHY` con `ST_GEOGFROMTEXT`, y conectar esa tabla a Looker Studio. Un CSV subido directamente a Looker Studio no convierte poligonos WKT en geometria nativa.
+
+Pasos resumidos:
+
+1. En BigQuery, crea un dataset, por ejemplo `cali_mapas`.
+2. Crea una tabla desde `looker_comunas_poligonos_wkt.csv`.
+3. Nombra la tabla `comunas_wkt`.
+4. Deja `geometry_wkt` como `STRING`; `total_predios` puede quedar como `INTEGER`.
+5. Ejecuta el SQL de `bigquery_crear_vista_comunas.sql`, cambiando `TU_PROYECTO.TU_DATASET`.
+6. En Looker Studio, agrega datos desde BigQuery y selecciona la vista `comunas_geography` o `comunas_geography_simplificada`.
+7. Agrega un grafico `Google Maps` > `Mapa relleno`.
+8. Configura `Ubicacion` con `codigo` o `comuna_id`, `Campo geoespacial` con `geometry`, y `Sugerencia` con `nombre_mapa`.
 
 ## Regenerar el mapa
 
