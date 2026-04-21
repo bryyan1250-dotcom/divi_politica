@@ -15,6 +15,7 @@ ruta_salida_looker = BASE_DIR / "mapa_cali_looker.html"
 ruta_salida_index = BASE_DIR / "index.html"
 ruta_salida_geojson = BASE_DIR / "mapa_cali_predios.geojson"
 ruta_salida_csv = BASE_DIR / "conteo_predios_por_comuna.csv"
+ruta_salida_looker_nativo = BASE_DIR / "looker_mapa_nativo.csv"
 
 
 # --- 2. PROCESAMIENTO DE DATOS ---
@@ -58,6 +59,36 @@ gdf_final[
 
 gdf_final[["codigo", "nombre_mapa", "comuna_id", "total_predios"]].to_csv(
     ruta_salida_csv,
+    index=False,
+    encoding="utf-8-sig",
+)
+
+puntos_mapa = gdf_final.copy()
+puntos_mapa["punto_mapa"] = puntos_mapa.geometry.representative_point()
+puntos_mapa["latitud"] = puntos_mapa["punto_mapa"].y
+puntos_mapa["longitud"] = puntos_mapa["punto_mapa"].x
+puntos_mapa["ubicacion"] = (
+    puntos_mapa["latitud"].round(7).astype(str)
+    + ","
+    + puntos_mapa["longitud"].round(7).astype(str)
+)
+puntos_mapa["tipo_zona"] = puntos_mapa["codigo"].astype(int).apply(
+    lambda codigo: "Comuna" if codigo <= 22 else "Corregimiento"
+)
+
+puntos_mapa[
+    [
+        "codigo",
+        "nombre_mapa",
+        "tipo_zona",
+        "comuna_id",
+        "total_predios",
+        "latitud",
+        "longitud",
+        "ubicacion",
+    ]
+].to_csv(
+    ruta_salida_looker_nativo,
     index=False,
     encoding="utf-8-sig",
 )
@@ -218,4 +249,5 @@ fig_looker.write_html(
 
 print(f"GeoJSON guardado en: {ruta_salida_geojson}")
 print(f"CSV guardado en: {ruta_salida_csv}")
+print(f"CSV para mapa nativo de Looker guardado en: {ruta_salida_looker_nativo}")
 print("Proceso completado con exito.")
