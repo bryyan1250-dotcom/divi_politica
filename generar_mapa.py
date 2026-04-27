@@ -20,6 +20,20 @@ ruta_salida_csv = BASE_DIR / "conteo_predios_por_comuna.csv"
 ruta_salida_looker_nativo = BASE_DIR / "looker_mapa_nativo.csv"
 ruta_salida_looker_poligonos = BASE_DIR / "looker_comunas_poligonos_wkt.csv"
 ruta_salida_sin_geometria = BASE_DIR / "codigos_parquet_sin_geometria.csv"
+ruta_salida_mapa_rural = BASE_DIR / "mapa_cali_rural.html"
+ruta_salida_mapa_urbano = BASE_DIR / "mapa_cali_urbano_comunas_grises.html"
+ruta_salida_rural_wkt = BASE_DIR / "looker_rural_poligonos_wkt.csv"
+ruta_salida_urbano_wkt = BASE_DIR / "looker_urbano_poligonos_wkt.csv"
+
+COMUNAS_APAGADAS = {5, 6, 15, 16, 18}
+ESCALA_AZULES_OSCUROS = [
+    [0.0, "#edf4fb"],
+    [0.18, "#d5e6f5"],
+    [0.4, "#9cc2e2"],
+    [0.62, "#4d8fc3"],
+    [0.82, "#1f6da8"],
+    [1.0, "#0a3968"],
+]
 
 
 # --- 2. PROCESAMIENTO DE DATOS ---
@@ -130,6 +144,36 @@ poligonos_wkt[
     encoding="utf-8-sig",
 )
 
+gdf_rural = gdf_final[gdf_final["codigo"].astype(int) > 22].copy()
+gdf_rural["estado_mapa"] = "Rural"
+gdf_rural["grupo_mapa"] = "Rural de Cali"
+
+gdf_urbano = gdf_final[gdf_final["codigo"].astype(int).between(1, 22)].copy()
+gdf_urbano["codigo_int"] = gdf_urbano["codigo"].astype(int)
+gdf_urbano["estado_mapa"] = gdf_urbano["codigo_int"].apply(
+    lambda codigo: "Apagada" if codigo in COMUNAS_APAGADAS else "Urbana activa"
+)
+gdf_urbano["grupo_mapa"] = gdf_urbano["estado_mapa"]
+
+for datos, ruta_csv in [
+    (gdf_rural, ruta_salida_rural_wkt),
+    (gdf_urbano, ruta_salida_urbano_wkt),
+]:
+    salida = datos.copy()
+    salida["geometry_wkt"] = salida.geometry.to_wkt()
+    salida[
+        [
+            "codigo",
+            "nombre_mapa",
+            "tipo_zona",
+            "comuna_id",
+            "total_predios",
+            "estado_mapa",
+            "grupo_mapa",
+            "geometry_wkt",
+        ]
+    ].to_csv(ruta_csv, index=False, encoding="utf-8-sig")
+
 
 # --- 3. CREACION DEL MAPA INTERACTIVO ---
 print("Generando mapa interactivo...")
@@ -141,7 +185,7 @@ fig = px.choropleth_map(
     locations="feature_id",
     featureidkey="properties.feature_id",
     color="total_predios",
-    color_continuous_scale=px.colors.sequential.Blues,
+    color_continuous_scale=ESCALA_AZULES_OSCUROS,
     map_style="carto-positron",
     zoom=10.5,
     center={"lat": 3.4372, "lon": -76.5225},
@@ -166,25 +210,8 @@ fig.update_traces(
 )
 
 fig.update_layout(
-    title={
-        "text": "<b>Actualizacion Catastral Cali 2026: Predios por Comuna y Corregimiento</b>",
-        "y": 0.97,
-        "x": 0.5,
-        "xanchor": "center",
-        "yanchor": "top",
-        "font": {"size": 20, "color": "#042a4f"},
-    },
-    margin={"r": 0, "t": 48, "l": 0, "b": 0},
-    coloraxis_colorbar={
-        "title": "Predios",
-        "thicknessmode": "pixels",
-        "thickness": 15,
-        "lenmode": "pixels",
-        "len": 300,
-        "yanchor": "top",
-        "y": 0.85,
-        "ticks": "outside",
-    },
+    margin={"r": 0, "t": 0, "l": 0, "b": 0},
+    coloraxis_showscale=False,
     hoverlabel={"bgcolor": "white", "font_size": 14, "font_family": "Arial"},
 )
 
@@ -212,7 +239,7 @@ fig_looker = px.choropleth(
     locations="feature_id",
     featureidkey="properties.feature_id",
     color="total_predios",
-    color_continuous_scale=px.colors.sequential.Blues,
+    color_continuous_scale=ESCALA_AZULES_OSCUROS,
     hover_name="nombre_mapa",
     hover_data={
         "feature_id": False,
@@ -249,27 +276,10 @@ fig_looker.update_geos(
 )
 
 fig_looker.update_layout(
-    title={
-        "text": "<b>Actualizacion Catastral Cali 2026: Predios por Comuna y Corregimiento</b>",
-        "y": 0.98,
-        "x": 0.5,
-        "xanchor": "center",
-        "yanchor": "top",
-        "font": {"size": 18, "color": "#042a4f"},
-    },
     paper_bgcolor="white",
     plot_bgcolor="white",
-    margin={"r": 0, "t": 48, "l": 0, "b": 0},
-    coloraxis_colorbar={
-        "title": "Predios",
-        "thicknessmode": "pixels",
-        "thickness": 15,
-        "lenmode": "pixels",
-        "len": 280,
-        "yanchor": "top",
-        "y": 0.86,
-        "ticks": "outside",
-    },
+    margin={"r": 0, "t": 0, "l": 0, "b": 0},
+    coloraxis_showscale=False,
     hoverlabel={"bgcolor": "white", "font_size": 14, "font_family": "Arial"},
 )
 
@@ -280,12 +290,70 @@ config_looker = {
     "modeBarButtonsToRemove": ["lasso2d", "select2d"],
 }
 
+
+def guardar_mapa_division(datos, ruta_html, centro, zoom):
+    figura = px.choropleth_map(
+        datos,
+        geojson=datos.__geo_interface__,
+        locations="feature_id",
+        featureidkey="properties.feature_id",
+        color="total_predios",
+        color_continuous_scale=ESCALA_AZULES_OSCUROS,
+        map_style="carto-positron",
+        zoom=zoom,
+        center=centro,
+        opacity=0.88,
+        hover_name="nombre_mapa",
+        hover_data={
+            "feature_id": False,
+            "codigo": False,
+            "comuna_id": False,
+            "nombre_mapa": False,
+            "total_predios": ":,.0f",
+        },
+        labels={"total_predios": "Total predios"},
+    )
+
+    figura.update_traces(
+        marker_line_width=1.4,
+        marker_line_color="#ffffff",
+        hovertemplate="<b>%{hovertext}</b><br>Total predios: %{z:,.0f}<extra></extra>",
+    )
+
+    figura.update_layout(
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        coloraxis_showscale=False,
+        hoverlabel={"bgcolor": "white", "font_size": 14, "font_family": "Arial"},
+    )
+
+    print(f"Guardando mapa en: {ruta_html}")
+    figura.write_html(
+        ruta_html,
+        include_plotlyjs=True,
+        full_html=True,
+        config=config_looker,
+    )
+
 print(f"Guardando version compatible con Looker Studio en: {ruta_salida_looker}")
 fig_looker.write_html(
     ruta_salida_looker,
     include_plotlyjs=True,
     full_html=True,
     config=config_looker,
+)
+
+guardar_mapa_division(
+    gdf_rural,
+    ruta_salida_mapa_rural,
+    {"lat": 3.455, "lon": -76.577},
+    10.4,
+)
+
+guardar_mapa_division(
+    gdf_urbano,
+    ruta_salida_mapa_urbano,
+    {"lat": 3.4372, "lon": -76.5225},
+    11.15,
 )
 
 print(f"Actualizando pagina principal en: {ruta_salida_index}")
@@ -343,17 +411,9 @@ fig_claro.update_geos(
 )
 
 fig_claro.update_layout(
-    title={
-        "text": "<b>Division politica de Cali: Comunas y Corregimientos</b>",
-        "y": 0.98,
-        "x": 0.5,
-        "xanchor": "center",
-        "yanchor": "top",
-        "font": {"size": 20, "color": "#042a4f"},
-    },
     paper_bgcolor="white",
     plot_bgcolor="white",
-    margin={"r": 0, "t": 48, "l": 0, "b": 0},
+    margin={"r": 0, "t": 0, "l": 0, "b": 0},
     legend={
         "orientation": "h",
         "yanchor": "bottom",
